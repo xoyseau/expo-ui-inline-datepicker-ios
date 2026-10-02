@@ -1,0 +1,143 @@
+diff --git a/ios/DatePickerView.swift b/ios/DatePickerView.swift
+index 24db7b13b0eb4e935cacfdc5b34978d13a290246..18c7ef8e449b65a569d0f97a1ad6c1e2fb6fad7e 100644
+--- a/ios/DatePickerView.swift
++++ b/ios/DatePickerView.swift
+@@ -20,7 +20,7 @@ internal struct DatePickerView: ExpoSwiftUI.View {
+ #if os(tvOS)
+     Text("DatePicker is not supported on tvOS")
+ #else
+-    createDatePicker()
++    picker
+       .frame(minWidth: isGraphicalStyle ? 320 : nil)
+       .onChange(of: date) { newDate in
+         if props.selection == newDate { return }
+@@ -41,6 +41,19 @@ internal struct DatePickerView: ExpoSwiftUI.View {
+   }
+ 
+ #if !os(tvOS)
++  @ViewBuilder
++  private var picker: some View {
++    if isGraphicalStyle && props.title == nil && !hasChildren {
++      InlineDatePicker(
++        date: $date,
++        range: props.range,
++        components: props.displayedComponents
++      )
++    } else {
++      createDatePicker()
++    }
++  }
++
+   @ViewBuilder
+   private func createDatePicker() -> some View {
+     let components = props.displayedComponents.toSwiftUIComponents()
+@@ -84,6 +97,109 @@ internal struct DatePickerView: ExpoSwiftUI.View {
+ #endif
+ }
+ 
++#if !os(tvOS)
++// The graphical SwiftUI DatePicker isn't re-measured once UICalendarView settles its height
++// over its first layout passes, so a matchContents Host keeps an intermediate height
++// (https://github.com/expo/expo/issues/47765). Asking the on-screen picker again doesn't help:
++// once laid out, its fitting height follows its current frame. This hosts UIDatePicker directly
++// and sizes it from an identically configured picker that never goes on screen.
++private struct InlineDatePicker: UIViewRepresentable {
++  @Binding var date: Date
++  let range: DateRange?
++  let components: [DatePickerComponent]
++
++  func makeCoordinator() -> Coordinator {
++    Coordinator(date: $date)
++  }
++
++  func makeUIView(context: Context) -> UIDatePicker {
++    let picker = UIDatePicker()
++    picker.preferredDatePickerStyle = .inline
++    picker.addTarget(context.coordinator, action: #selector(Coordinator.valueChanged(_:)), for: .valueChanged)
++    return picker
++  }
++
++  func updateUIView(_ picker: UIDatePicker, context: Context) {
++    context.coordinator.date = $date
++    configure(picker, environment: context.environment)
++    if let sizingPicker = context.coordinator.sizingPicker {
++      configure(sizingPicker, environment: context.environment)
++    }
++  }
++
++  func sizeThatFits(_ proposal: ProposedViewSize, uiView picker: UIDatePicker, context: Context) -> CGSize? {
++    let category = picker.traitCollection.preferredContentSizeCategory
++    let coordinator = context.coordinator
++    // An existing sizing picker doesn't re-measure after its text size changes, so a new
++    // text size gets a new one.
++    let sizingPicker: UIDatePicker
++    if let existing = coordinator.sizingPicker, coordinator.sizingCategory == category {
++      sizingPicker = existing
++    } else {
++      sizingPicker = makeSizingPicker(category: category, environment: context.environment)
++      coordinator.sizingPicker = sizingPicker
++      coordinator.sizingCategory = category
++    }
++    guard let width = proposal.width, width.isFinite else {
++      return sizingPicker.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
++    }
++    let height = sizingPicker.systemLayoutSizeFitting(
++      CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
++      withHorizontalFittingPriority: .required,
++      verticalFittingPriority: .fittingSizeLevel
++    ).height
++    return CGSize(width: width, height: height)
++  }
++
++  private func makeSizingPicker(category: UIContentSizeCategory, environment: EnvironmentValues) -> UIDatePicker {
++    let sizingPicker = UIDatePicker()
++    sizingPicker.preferredDatePickerStyle = .inline
++    if #available(iOS 17.0, *) {
++      sizingPicker.traitOverrides.preferredContentSizeCategory = category
++    }
++    configure(sizingPicker, environment: environment)
++    return sizingPicker
++  }
++
++  // Only assigns what changed: each assignment can relayout the calendar.
++  private func configure(_ picker: UIDatePicker, environment: EnvironmentValues) {
++    if picker.datePickerMode != mode { picker.datePickerMode = mode }
++    if picker.locale != environment.locale { picker.locale = environment.locale }
++    if picker.calendar != environment.calendar { picker.calendar = environment.calendar }
++    if picker.timeZone != environment.timeZone { picker.timeZone = environment.timeZone }
++    if picker.minimumDate != range?.start { picker.minimumDate = range?.start }
++    if picker.maximumDate != range?.end { picker.maximumDate = range?.end }
++    if picker.isEnabled != environment.isEnabled { picker.isEnabled = environment.isEnabled }
++    if picker.date != date { picker.setDate(date, animated: false) }
++  }
++
++  private var mode: UIDatePicker.Mode {
++    switch (components.contains(.date), components.contains(.hourAndMinute)) {
++    case (true, true):
++      return .dateAndTime
++    case (false, true):
++      return .time
++    default:
++      return .date
++    }
++  }
++
++  final class Coordinator: NSObject {
++    var date: Binding<Date>
++    var sizingPicker: UIDatePicker?
++    var sizingCategory: UIContentSizeCategory?
++
++    init(date: Binding<Date>) {
++      self.date = date
++    }
++
++    @objc func valueChanged(_ picker: UIDatePicker) {
++      date.wrappedValue = picker.date
++    }
++  }
++}
++#endif
++
+ internal struct DateRange: Record {
+   @Field var start: Date?
+   @Field var end: Date?

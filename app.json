@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "expo-ui-inline-datepicker-ios",
+    "slug": "expo-ui-inline-datepicker-ios",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.repro.inlinedatepicker"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "dev.repro.inlinedatepicker"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
